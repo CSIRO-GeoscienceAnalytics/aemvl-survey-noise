@@ -1,12 +1,12 @@
 import numpy as np
+from statistics import stdev
 import pandas as pd
 import matplotlib.pyplot as plt
 import scipy
 from scipy import signal, optimize, stats
 from collections import deque
 from itertools import islice
-import plotly
-
+import plotly		
 
 def sliding_window(iterable, size=2, step=1, fillvalue=None):
     if size < 0 or step < 1:
@@ -24,6 +24,39 @@ def sliding_window(iterable, size=2, step=1, fillvalue=None):
             return
         q.extend(next(it, fillvalue) for _ in range(step - 1))
 
+def getDeltasFromList(list):
+	if list.size < 2:
+		raise ValueError
+	
+	deltaList = []
+
+	for i in range(list.size-1):
+		deltaList.append(list[i+1] - list[i])
+
+	return deltaList
+
+def getDeltasFromMatrix(matrix):
+	if matrix.shape[0] < 2:
+		raise ValueError
+	
+	deltaMatrix = np.zeros((matrix.shape[0]-1, matrix.shape[1]))
+
+	for j in range(matrix.shape[1]):
+		for i in range(matrix.shape[0]-1):
+			deltaMatrix[i][j] = matrix[i][j] - matrix[i+1][j]
+
+	return deltaMatrix
+
+def hasChannelCrossOver(matrix):
+	if matrix.shape[0] < 2:
+		raise ValueError
+
+	for i in range(matrix.shape[0]):
+		for j in range(matrix.shape[1]-1, 1, -1):
+			if(matrix[i][j] > matrix[i][j-1]):
+				return True
+	
+	return False
 
 def read_line(f):
 	df = pd.read_csv(f, sep=",")
@@ -143,7 +176,7 @@ def detect_method2_full(m, draw_lines=True, draw_fit_lines=True):
 		if np.count_nonzero(np.asarray(ix) < 0):
 			ix = list(range(m.shape[0])[-WINDOW_SIZE:])
 
-		# print(ix)
+		print(ix)
 
 		window = sig[ix, :]
 		mmean = np.mean(window, axis=0)
@@ -153,9 +186,112 @@ def detect_method2_full(m, draw_lines=True, draw_fit_lines=True):
 		noisy = np.count_nonzero(np.where(window < mm)) != 0
 		print(noisy)
 
-		# if noisy:
-		# 	for i in range(window.shape[1]):
-		# 		plt.plot(fid[ix], window[:, i], "-")
+		if noisy:
+		 	for i in range(window.shape[1]):
+		 		plt.plot(fid[ix], window[:, i], "-")
+
+#Compares the standard deviation of each channel in the segment
+#Helps eliminate the detection of the smooth waves but not great at detecting smaller noise
+def detect_method3(m, threshold=2, windsize=10, step=2):
+	fid = m[:, 0]
+	
+	columns = m.shape[0]
+	rows = m.shape[1]
+
+	print("Columns = " + str(columns))
+	print("Rows = " + str(rows))
+
+	for j in range(0,columns,step):
+		if((j + windsize) < columns):
+			#A segment with all channels
+			segment = m[j:j + windsize,:]
+			sdArray = []
+			for i in range(1,rows):							
+				sdArray.append(stdev(segment[:,i]))
+			
+			#If Noisy
+			if(stdev(sdArray) > threshold):
+				print("Noise Detected")		 			
+				for i in range(1,rows):
+					plt.plot(fid[j:j + windsize], segment[:,i], "-")
+		else:
+			break
+
+# Calculate the smoothness (No comparison between channels but works well)
+# Perhaps the ideal method given a single channel of data
+# Prone to picking up small wave patterns
+def detect_method4(m, threshold=0.5, windsize=10, step=2):
+	fid = m[:, 0]
+	
+	columns = m.shape[0]
+	rows = m.shape[1]
+
+	print("Columns = " + str(columns))
+	print("Rows = " + str(rows))
+
+	for i in range(1,rows):
+		print("I = " + str(i))
+		cnl = m[:,i]
+		for j in range(0,columns,step):
+			if((j + windsize) < columns):
+				wind = cnl[j:j + windsize]
+				deltas = getDeltasFromList(wind)
+				sd = stdev(deltas)
+				#If Noisy
+				if(sd > threshold):
+					print("Noise Detected")		 			
+					plt.plot(fid[j:j + windsize], wind, "-")
+			else:
+				break
+
+# Creates a matrix of delta values
+# Uses a window on the x and y axis
+# For a given window compare the delta values on the y axis and get a value for standard deviation  
+# Get a mean value of the standard deviations accross the x axis 
+# Compare the mean value to a threshold to dectect if the window is "Noisy"
+# There is also a "low threshold" which requires at least on of the channel lines to cross 
+def detect_method4_full(m, lowThreshold=0.5, highThreshold=.1, windsize=20, step=10, channelStep=2, channelGroupSize=4):
+	fid = m[:, 0]
+	sig = m[:, 1:]
+
+	deltaMatrix = getDeltasFromMatrix(sig)
+	columns = deltaMatrix.shape[0]
+	rows = deltaMatrix.shape[1]
+
+
+	for j in range(0,columns,step):
+		if((j + windsize) > columns):
+			break
+		
+		cgs = channelGroupSize
+
+		for i in range(0,rows,channelStep):
+
+			if((i + channelGroupSize) > rows):
+				cgs = rows - i
+				#ignore the orphaned channels on the end
+				break
+
+			deltaArray = deltaMatrix[j:j+windsize,i:i+cgs]
+			sdArray = []
+			for k in range(0,windsize):
+				sdArray.append(stdev(deltaArray[k,:].tolist()))
+
+			avgsd = np.mean(sdArray)		
+
+			#Definate noise
+			if(avgsd > highThreshold):
+				print("High Noise Detected")
+				for l in range(i,i+cgs):		 			
+					plt.plot(fid[j:j + windsize], sig[j:j + windsize,l], "-")
+			#Might be noise
+			elif(avgsd > lowThreshold and hasChannelCrossOver(sig[j:j + windsize,i:i+cgs])):
+				print("Low Noise Detected with crossover")
+				for l in range(i,i+cgs):		 			
+					plt.plot(fid[j:j + windsize], sig[j:j + windsize,l], "-")
+				
+
+
 
 
 def run_by_channel(m, fn):
@@ -164,7 +300,7 @@ def run_by_channel(m, fn):
 
 
 def main():
-	FILENAME = "data/200101.csv"
+	FILENAME = "data/200301_hmx.csv"
 	m = read_line(FILENAME)
 
 	# Transform.
@@ -178,12 +314,20 @@ def main():
 	plot_all(m)
 
 	# Get channels of interest.
-	detect_method1(m[:, np.r_[0, 12]])
+	# detect_method1(m[:, np.r_[0, 12]])
 	# detect_method2(m)
 
 	# Detect all.
 	# run_by_channel(m, lambda x: detect_method1(x, draw_lines=False, draw_fit_lines=False))
-	detect_method2_full(m)
+	# detect_method2_full(m)
+	# detect_method3(m,.1, 20, 5)
+	# detect_method4(m,.012, 20, 10)
+	
+	#Calibrated for non _hmx
+	detect_method4_full(m,.003, .01, 20, 10, 2, 4)
+
+  # Calibrated for _hmx using a high threshold works to detect the obvious noise
+	#detect_method4_full(m,.03, .03, 20, 10, 2, 4)
 
 	# Convert to Plotly.
 	plotly.offline.plot_mpl(mpl_fig=fig, strip_style=False, show_link=False, auto_open=True)
