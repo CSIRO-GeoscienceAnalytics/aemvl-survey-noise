@@ -263,7 +263,7 @@ def detect_method4(data, threshold=0.5, windsize=10, step=2):
 
 	for i in range(1,rows):
 		print("I = " + str(i))
-		cnl = m[:,i]
+		cnl = data[:,i]
 		for j in range(0,columns,step):
 			if((j + windsize) < columns):
 				wind = cnl[j:j + windsize]
