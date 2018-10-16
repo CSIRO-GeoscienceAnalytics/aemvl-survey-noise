@@ -6,7 +6,39 @@ import scipy
 from scipy import signal, optimize, stats
 from collections import deque
 from itertools import islice
-import plotly		
+import plotly.plotly as py
+import plotly.tools as tls
+import plotly.graph_objs as go
+import dash
+import dash_core_components as dcc
+import dash_html_components as html		
+
+
+# Main Styling and layout
+external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
+app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
+
+app.layout = html.Div(children=[
+    html.H1(children='AEMVL Survey Noise Utility'),
+
+    html.Label(children='Select Test Data: ', style={'width':'150px', 'display':'inline-block'}),
+		dcc.Dropdown( id="test-select", className="",
+        options=[
+            {'label': '200101', 'value': 'data/200101.csv'},
+            {'label': '200201', 'value': 'data/200201.csv'},
+            {'label': '200301', 'value': 'data/200301.csv'},
+						{'label': '200301_hmx', 'value': 'data/200301_hmx.csv'},
+						{'label': '200301_lmz', 'value': 'data/200301_lmz.csv'},
+						{'label': '200401', 'value': 'data/200401.csv'},
+						{'label': '200501', 'value': 'data/200501.csv'}
+        ],
+        value='',
+				style={'width':'200px', 'display':'inline-block'}
+    ),
+    dcc.Graph(
+        id='signal-noise'
+    )
+])
 
 def sliding_window(iterable, size=2, step=1, fillvalue=None):
     if size < 0 or step < 1:
@@ -63,10 +95,10 @@ def read_line(f):
 	return df.as_matrix()
 
 
-def plot_all(m):
+def plot_all(m, axes):
 	fid = m[:, 0]
 	for i in range(1, m.shape[1]):
-		plt.plot(fid, m[:, i], "-", color=".9")
+		axes.plot(fid, m[:, i], "-", color=".9")
 
 
 def detect_method1(m, draw_lines=True, draw_fit_lines=True):
@@ -220,11 +252,11 @@ def detect_method3(m, threshold=2, windsize=10, step=2):
 # Calculate the smoothness (No comparison between channels but works well)
 # Perhaps the ideal method given a single channel of data
 # Prone to picking up small wave patterns
-def detect_method4(m, threshold=0.5, windsize=10, step=2):
-	fid = m[:, 0]
+def detect_method4(data, threshold=0.5, windsize=10, step=2):
+	fid = data[:, 0]
 	
-	columns = m.shape[0]
-	rows = m.shape[1]
+	columns = data.shape[0]
+	rows = data.shape[1]
 
 	print("Columns = " + str(columns))
 	print("Rows = " + str(rows))
@@ -250,9 +282,9 @@ def detect_method4(m, threshold=0.5, windsize=10, step=2):
 # Get a mean value of the standard deviations accross the x axis 
 # Compare the mean value to a threshold to dectect if the window is "Noisy"
 # There is also a "low threshold" which requires at least on of the channel lines to cross 
-def detect_method4_full(m, lowThreshold=0.5, highThreshold=.1, windsize=20, step=10, channelStep=2, channelGroupSize=4):
-	fid = m[:, 0]
-	sig = m[:, 1:]
+def detect_method4_full(axes, data, lowThreshold=0.5, highThreshold=.1, windsize=20, step=10, channelStep=2, channelGroupSize=4):
+	fid = data[:, 0]
+	sig = data[:, 1:]
 
 	deltaMatrix = getDeltasFromMatrix(sig)
 	columns = deltaMatrix.shape[0]
@@ -283,35 +315,36 @@ def detect_method4_full(m, lowThreshold=0.5, highThreshold=.1, windsize=20, step
 			if(avgsd > highThreshold):
 				print("High Noise Detected")
 				for l in range(i,i+cgs):		 			
-					plt.plot(fid[j:j + windsize], sig[j:j + windsize,l], "-")
+					axes.plot(fid[j:j + windsize], sig[j:j + windsize,l], "-")
 			#Might be noise
 			elif(avgsd > lowThreshold and hasChannelCrossOver(sig[j:j + windsize,i:i+cgs])):
 				print("Low Noise Detected with crossover")
 				for l in range(i,i+cgs):		 			
-					plt.plot(fid[j:j + windsize], sig[j:j + windsize,l], "-")
-				
+					axes.plot(fid[j:j + windsize], sig[j:j + windsize,l], "-")			
 
+def run_by_channel(data, fn):
+	for i in range(1, data.shape[1]):
+		fn(data[:, np.r_[0, i]])
 
-
-
-def run_by_channel(m, fn):
-	for i in range(1, m.shape[1]):
-		fn(m[:, np.r_[0, i]])
-
-
-def main():
-	FILENAME = "data/200301_hmx.csv"
+@app.callback(
+	dash.dependencies.Output('signal-noise', 'figure'),
+	[dash.dependencies.Input('test-select', 'value')])
+def generate_graph(selected_filename):
+	if(selected_filename == None or selected_filename == ''):
+		return
+	
+	FILENAME = selected_filename
 	m = read_line(FILENAME)
 
 	# Transform.
 	m[:, 1:] = np.arcsinh(m[:, 1:])
 
 	# Setup figure.
-	fig = plt.figure(figsize=(18, 6), tight_layout=False)
-	plt.subplots_adjust(left=0.05, right=0.99, top=0.94, bottom=0.05)
-	plt.title(FILENAME)
+	fig, ax = plt.subplots(figsize=(18, 6), tight_layout=False)
+	fig.subplots_adjust(left=0.05, right=0.99, top=0.94, bottom=0.05)
+	ax.set_title(FILENAME)
 
-	plot_all(m)
+	plot_all(m, ax)
 
 	# Get channels of interest.
 	# detect_method1(m[:, np.r_[0, 12]])
@@ -324,14 +357,16 @@ def main():
 	# detect_method4(m,.012, 20, 10)
 	
 	#Calibrated for non _hmx
-	detect_method4_full(m,.003, .01, 20, 10, 2, 4)
+	detect_method4_full(ax, m,.003, .01, 20, 10, 2, 4)
 
   # Calibrated for _hmx using a high threshold works to detect the obvious noise
-	#detect_method4_full(m,.03, .03, 20, 10, 2, 4)
+	#detect_method4_full(ax, m,.03, .03, 20, 10, 2, 4)
 
 	# Convert to Plotly.
-	plotly.offline.plot_mpl(mpl_fig=fig, strip_style=False, show_link=False, auto_open=True)
+	#plotly.offline.plot_mpl(mpl_fig=fig, strip_style=False, show_link=False, auto_open=True)
 
+	return tls.mpl_to_plotly(fig)
 
 if __name__ == "__main__":
-	main()
+	app.run_server(debug=True)
+	#main()
