@@ -1,0 +1,9 @@
+plotly
+numpy
+pandas
+matplotlib
+scipy
+dash
+dash_core_components
+dash_html_components
+statistics
