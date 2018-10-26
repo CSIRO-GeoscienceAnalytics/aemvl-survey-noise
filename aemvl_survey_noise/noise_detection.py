@@ -39,8 +39,8 @@ def detect_noise_single(axes, data, threshold=0.5, windsize=10, step=2):
 def detect_noise_multi(
     axes,
     data,
-    low_threshold=0.5,
-    high_threshold=0.1,
+    low_threshold=0.003,
+    high_threshold=0.01,
     windsize=20,
     step=10,
     channel_step=2,
@@ -69,12 +69,8 @@ def detect_noise_multi(
                 # ignore the orphaned channels on the end
                 break
 
-            delta_array = delta_matrix[j : j + windsize, i : i + cgs]
-            sd_array = []
-            for k in range(0, windsize):
-                sd_array.append(stdev(delta_array[k, :].tolist()))
-
-            avgsd = np.mean(sd_array)
+            delta_window = delta_matrix[j : j + windsize, i : i + cgs]
+            avgsd = np.mean(delta_window.std(axis=1))
 
             # Definate noise
             if avgsd > high_threshold:
@@ -126,11 +122,6 @@ def detect_noise_sections(
 
             delta_window = delta_matrix[j : j + windsize, i : i + cgs]
             avgsd = np.mean(delta_window.std(axis=1))
-        
-            #sd_array = []
-            #for k in range(0, windsize):
-            #    sd_array.append(stdev(delta_window[k, :].tolist()))
-            #avgsd = np.mean(sd_array)
 
             # If window is noisey
             if avgsd > high_threshold or (avgsd > low_threshold
@@ -143,7 +134,7 @@ def detect_noise_sections(
                 noise_end = j + windsize
                 break
 
-        #Record noise from previous window(s) if this window is not noisy or it is the last window
+        # Record noise from previous window(s) if this window is not noisy or it is the last window
         if(noise_start is not None and (noise is False or (j + windsize + step > columns))):
             noise_array.append([noise_start, noise_end])
             noise_start = None
