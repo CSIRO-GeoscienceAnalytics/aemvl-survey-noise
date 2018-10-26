@@ -1,0 +1,18 @@
+{
+    "python.unitTest.unittestEnabled": false,
+    "python.unitTest.nosetestsEnabled": false,
+    "python.unitTest.pyTestEnabled": true,
+    "python.formatting.provider": "black",
+    "python.unitTest.pyTestArgs": [
+        "aemvl_survey_noise/tests"
+    ],
+    "python.linting.pylintArgs": [
+        "--max-line-length=120",
+        "--max-attributes=12"
+    ],
+    "python.linting.ignorePatterns": [
+        ".vscode/*.py",
+        "**/site-packages/**/*.py"
+        //,"**/tests/**/*.py"
+    ]
+}
