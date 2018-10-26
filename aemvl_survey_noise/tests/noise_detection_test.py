@@ -8,6 +8,7 @@ def read_line(f):
     df = pd.read_csv(f, sep=",")
     return df.as_matrix()
 
+# Use py.test -s to see ouputs
 def test_simple_call():
 
     m = read_line("data/200101.csv")
