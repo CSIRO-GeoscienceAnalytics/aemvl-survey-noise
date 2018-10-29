@@ -49,9 +49,7 @@ def detect_noise_multi(
     fid = data[:, 0]
     sig = data[:, 1:]
 
-    start = time.time()
     delta_matrix = getDeltasFromMatrix(sig)
-    end = time.time()
 
     columns = delta_matrix.shape[0]
     rows = delta_matrix.shape[1]
