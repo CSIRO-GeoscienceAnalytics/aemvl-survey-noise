@@ -6,7 +6,8 @@ import aemvl_survey_noise as asn
 
 def read_line(f):
     df = pd.read_csv(f, sep=",")
-    return df.as_matrix()
+    return df.values
+
 
 # Use py.test -s to see ouputs
 def test_simple_call():

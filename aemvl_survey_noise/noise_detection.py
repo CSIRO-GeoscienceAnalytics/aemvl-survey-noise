@@ -95,7 +95,7 @@ def detect_noise_sections(
 ):
     sig = data[:, 1:]
 
-    delta_matrix = getDeltasFromMatrix(sig)  
+    delta_matrix = getDeltasFromMatrix(sig)
     columns = delta_matrix.shape[0]
     rows = delta_matrix.shape[1]
 
@@ -122,18 +122,22 @@ def detect_noise_sections(
             avgsd = np.mean(delta_window.std(axis=1))
 
             # If window is noisey
-            if avgsd > high_threshold or (avgsd > low_threshold
-                and hasChannelCrossOver(sig[j : j + windsize, i : i + cgs])):
+            if avgsd > high_threshold or (
+                avgsd > low_threshold
+                and hasChannelCrossOver(sig[j : j + windsize, i : i + cgs])
+            ):
 
                 noise = True
-                if(noise_start is None):
+                if noise_start is None:
                     noise_start = j
 
                 noise_end = j + windsize
                 break
 
         # Record noise from previous window(s) if this window is not noisy or it is the last window
-        if(noise_start is not None and (noise is False or (j + windsize + step > columns))):
+        if noise_start is not None and (
+            noise is False or (j + windsize + step > columns)
+        ):
             noise_array.append([noise_start, noise_end])
             noise_start = None
             noise_end = None
